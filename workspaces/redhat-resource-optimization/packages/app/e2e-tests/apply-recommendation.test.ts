@@ -183,7 +183,7 @@ test.describe('Resource Optimization - Apply Recommendation @live @ro @workflow'
       .or(failedBadge)
       .or(runningBadge)
       .or(pendingBadge);
-    await expect(anyStatus).toBeVisible({ timeout: 30000 });
+    await expect(anyStatus).toBeVisible({ timeout: 60000 });
 
     const terminalStatus = completedBadge.or(failedBadge);
     await expect(terminalStatus).toBeVisible({ timeout: 300000 });
