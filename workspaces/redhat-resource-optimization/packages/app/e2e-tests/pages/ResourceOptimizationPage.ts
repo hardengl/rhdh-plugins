@@ -762,9 +762,13 @@ export class ResourceOptimizationPage {
    * Verify Unauthorized error is displayed.
    */
   async expectUnauthorized() {
-    // The secure proxy may return 403 (Forbidden) or filter data to empty.
-    // The UI may render an alert banner OR an empty table with 0 containers.
-    // Accept either pattern as valid "unauthorized" behavior.
+    // RBAC policy propagation can be slow — wait for in-flight requests to
+    // settle so the backend has returned the 403 / empty-data response before
+    // we inspect the DOM.
+    await this.page
+      .waitForLoadState('networkidle', { timeout: 15000 })
+      .catch(() => {});
+
     const errorAlert = this.page
       .getByRole('alert')
       .filter({ hasText: /unauthorized|forbidden|error/i });
@@ -772,7 +776,7 @@ export class ResourceOptimizationPage {
     const emptyTable = this.page.getByText(/Optimizable containers \(0\)/);
 
     const unauthorizedIndicator = errorAlert.or(emptyTable);
-    await expect(unauthorizedIndicator).toBeVisible({ timeout: 20000 });
+    await expect(unauthorizedIndicator).toBeVisible({ timeout: 30000 });
   }
 
   /**
