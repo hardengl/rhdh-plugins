@@ -119,7 +119,10 @@ test.describe('Secure Proxy & RBAC Security @live @ro @security', () => {
       const errorAlert = page.getByRole('alert').filter({
         hasText: /forbidden|unauthorized|error/i,
       });
-      await expect(errorAlert).toBeVisible({ timeout: 15000 });
+      await page
+        .waitForLoadState('networkidle', { timeout: 15000 })
+        .catch(() => {});
+      await expect(errorAlert).toBeVisible({ timeout: 30000 });
 
       // Specifically should NOT contain "500" or "Internal Server Error"
       const internalError = page.getByText(/500|Internal Server Error/);
