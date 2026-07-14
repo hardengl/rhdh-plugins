@@ -707,24 +707,30 @@ test.describe('Dynamic Permission Registration (FLPATH-4207) @live @ro @rbac @fl
       const apiResponses: { url: string; status: number }[] = [];
 
       await page.route(`**${API_BASE}/**`, async route => {
-        const response = await route.fetch();
-        apiResponses.push({
-          url: route.request().url(),
-          status: response.status(),
+        try {
+          const response = await route.fetch();
+          apiResponses.push({
+            url: route.request().url(),
+            status: response.status(),
+          });
+          await route.fulfill({ response });
+        } catch {
+          // Page/context may close during OIDC redirects — ignore
+        }
+      });
+
+      try {
+        await performOIDCLogin(page, user, pass);
+
+        await page.goto(PLUGIN_ROUTE_BASE, {
+          waitUntil: 'domcontentloaded',
         });
-        await route.fulfill({ response });
-      });
 
-      await performOIDCLogin(page, user, pass);
-
-      await page.goto(PLUGIN_ROUTE_BASE, {
-        waitUntil: 'domcontentloaded',
-      });
-
-      // Wait for the page to settle
-      await page.waitForTimeout(5000);
-
-      await page.unroute(`**${API_BASE}/**`);
+        // Wait for the page to settle
+        await page.waitForTimeout(5000);
+      } finally {
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+      }
 
       // Verify no 500 errors in any response
       const serverErrors = apiResponses.filter(r => r.status >= 500);
