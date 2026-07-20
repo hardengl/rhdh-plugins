@@ -44,7 +44,7 @@ async function globalSetup() {
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForLoadState('domcontentloaded');
 
-    // Handle login — try guest "Enter" first, fall back to OIDC popup.
+    // Handle login — try guest "Enter" first, fall back to OIDC.
     const enterButton = page.locator('button:has-text("Enter")');
     const hasEnter = await enterButton
       .isVisible({ timeout: 5000 })
@@ -55,13 +55,30 @@ async function globalSetup() {
     } else {
       const user = process.env.OIDC_USERNAME ?? 'ro-read-no-workflow';
       const pass = process.env.OIDC_PASSWORD ?? 'test';
-      const popupPromise = page.waitForEvent('popup');
+
+      // Try popup flow first (short timeout), fall back to redirect flow.
+      // Some RHDH/Keycloak configurations open a popup for OIDC login while
+      // others do a full-page redirect — we must handle both.
+      const popupPromise = page
+        .waitForEvent('popup', { timeout: 5000 })
+        .catch(() => null);
       await page.locator('button:has-text("Sign in")').click();
       const popup = await popupPromise;
-      await popup.getByLabel('Username or email').fill(user);
-      await popup.getByLabel('Password').fill(pass);
-      await popup.getByRole('button', { name: 'Sign in' }).click();
-      await popup.waitForEvent('close', { timeout: 30000 }).catch(() => {});
+
+      if (popup) {
+        // Popup flow — fill credentials in the popup window.
+        await popup.getByLabel('Username or email').fill(user);
+        await popup.getByLabel('Password').fill(pass);
+        await popup.getByRole('button', { name: 'Sign in' }).click();
+        await popup.waitForEvent('close', { timeout: 30000 }).catch(() => {});
+      } else {
+        // Redirect flow — Keycloak login form is on the same page.
+        await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+        await page.getByLabel('Username or email').fill(user);
+        await page.getByLabel('Password').fill(pass);
+        await page.getByRole('button', { name: 'Sign in' }).click();
+        await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
+      }
     }
 
     // Wait for the nav sidebar to appear after login.
