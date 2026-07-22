@@ -16,6 +16,19 @@
 
 import { Page } from '@playwright/test';
 
+/**
+ * Locator for the sidebar navigation area after login.
+ *
+ * In RHDH 1.11 the `<nav>` element itself has `height: 0` (its children
+ * overflow and render normally), so Playwright's `.isVisible()` returns
+ * `false` for the `<nav>` element.  We therefore wait for a visible link
+ * *inside* the sidebar instead, which reliably indicates the app has
+ * rendered the authenticated layout.
+ */
+function sidebarReady(page: Page) {
+  return page.locator('nav[aria-label="sidebar nav"] a').first();
+}
+
 export async function performGuestLogin(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
@@ -24,10 +37,7 @@ export async function performGuestLogin(page: Page) {
   await enterButton.waitFor({ state: 'visible', timeout: 15000 });
   await enterButton.click();
 
-  await page
-    .locator('nav')
-    .first()
-    .waitFor({ state: 'visible', timeout: 60000 });
+  await sidebarReady(page).waitFor({ state: 'visible', timeout: 60000 });
 }
 
 export async function performLogin(
@@ -38,16 +48,16 @@ export async function performLogin(
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
 
-  const nav = page.locator('nav').first();
+  const sidebar = sidebarReady(page);
   const enterButton = page.locator('button:has-text("Enter")');
 
   try {
     await enterButton.waitFor({ state: 'visible', timeout: 15000 });
     await enterButton.click();
   } catch {
-    if (await nav.isVisible()) return;
-    throw new Error('Neither Enter button nor nav appeared within timeout');
+    if (await sidebar.isVisible()) return;
+    throw new Error('Neither Enter button nor sidebar appeared within timeout');
   }
 
-  await nav.waitFor({ state: 'visible', timeout: 60000 });
+  await sidebar.waitFor({ state: 'visible', timeout: 60000 });
 }
