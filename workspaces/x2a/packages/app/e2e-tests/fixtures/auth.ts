@@ -24,8 +24,11 @@ export async function performGuestLogin(page: Page) {
   await enterButton.waitFor({ state: 'visible', timeout: 15000 });
   await enterButton.click();
 
+  // Wait for a sidebar link rather than the <nav> wrapper itself.
+  // In RHDH 1.11+ the MUI Drawer marks the <nav> element as hidden via CSS
+  // while its child links remain visible, causing Playwright to time out.
   await page
-    .locator('nav')
+    .locator('nav a')
     .first()
     .waitFor({ state: 'visible', timeout: 60000 });
 }
@@ -38,16 +41,18 @@ export async function performLogin(
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
 
-  const nav = page.locator('nav').first();
+  // Use a sidebar link as the login-success indicator instead of the <nav>
+  // wrapper, which RHDH 1.11+ marks as CSS-hidden (MUI Drawer behaviour).
+  const sidebarLink = page.locator('nav a').first();
   const enterButton = page.locator('button:has-text("Enter")');
 
   try {
     await enterButton.waitFor({ state: 'visible', timeout: 15000 });
     await enterButton.click();
   } catch {
-    if (await nav.isVisible()) return;
+    if (await sidebarLink.isVisible()) return;
     throw new Error('Neither Enter button nor nav appeared within timeout');
   }
 
-  await nav.waitFor({ state: 'visible', timeout: 60000 });
+  await sidebarLink.waitFor({ state: 'visible', timeout: 60000 });
 }
