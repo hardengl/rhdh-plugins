@@ -24,8 +24,12 @@ export async function performGuestLogin(page: Page) {
   await enterButton.waitFor({ state: 'visible', timeout: 15000 });
   await enterButton.click();
 
+  // Wait for a link inside the sidebar nav rather than the nav container
+  // itself. In RHDH 1.11+ the <nav> element may have CSS visibility:hidden
+  // while its children are still rendered visible, causing Playwright to
+  // consider the nav element hidden even though the sidebar is on screen.
   await page
-    .locator('nav')
+    .locator('nav a')
     .first()
     .waitFor({ state: 'visible', timeout: 60000 });
 }
@@ -38,16 +42,19 @@ export async function performLogin(
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
 
-  const nav = page.locator('nav').first();
+  // Use a sidebar link as the login-complete indicator rather than the
+  // nav container, which may be CSS-hidden in RHDH 1.11+ while its
+  // child links remain visible.
+  const sidebarLink = page.locator('nav a').first();
   const enterButton = page.locator('button:has-text("Enter")');
 
   try {
     await enterButton.waitFor({ state: 'visible', timeout: 15000 });
     await enterButton.click();
   } catch {
-    if (await nav.isVisible()) return;
+    if (await sidebarLink.isVisible()) return;
     throw new Error('Neither Enter button nor nav appeared within timeout');
   }
 
-  await nav.waitFor({ state: 'visible', timeout: 60000 });
+  await sidebarLink.waitFor({ state: 'visible', timeout: 60000 });
 }
