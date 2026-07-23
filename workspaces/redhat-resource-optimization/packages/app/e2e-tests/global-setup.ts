@@ -44,7 +44,7 @@ async function globalSetup() {
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForLoadState('domcontentloaded');
 
-    // Handle login — try guest "Enter" first, fall back to OIDC popup.
+    // Handle login — try guest "Enter" first, fall back to OIDC.
     const enterButton = page.locator('button:has-text("Enter")');
     const hasEnter = await enterButton
       .isVisible({ timeout: 5000 })
@@ -55,13 +55,47 @@ async function globalSetup() {
     } else {
       const user = process.env.OIDC_USERNAME ?? 'ro-read-no-workflow';
       const pass = process.env.OIDC_PASSWORD ?? 'test';
-      const popupPromise = page.waitForEvent('popup');
-      await page.locator('button:has-text("Sign in")').click();
+
+      // Listen for a popup but attach .catch() immediately so that if
+      // the promise rejects while we are still awaiting the click(),
+      // Node.js does not treat it as an unhandled rejection and crash
+      // the process.  The resolved value will be null when no popup
+      // appears (redirect-based OIDC flow).
+      const popupPromise = page
+        .waitForEvent('popup', { timeout: 15_000 })
+        .catch(() => null);
+
+      // noWaitAfter: don't let Playwright wait for a potential
+      // navigation — we handle both popup and redirect flows below.
+      await page
+        .locator('button:has-text("Sign in")')
+        .click({ noWaitAfter: true });
+
       const popup = await popupPromise;
-      await popup.getByLabel('Username or email').fill(user);
-      await popup.getByLabel('Password').fill(pass);
-      await popup.getByRole('button', { name: 'Sign in' }).click();
-      await popup.waitForEvent('close', { timeout: 30000 }).catch(() => {});
+
+      if (popup) {
+        // Popup-based OIDC flow (Keycloak opens in a new window).
+        await popup.getByLabel('Username or email').fill(user);
+        await popup.getByLabel('Password').fill(pass);
+        await popup.getByRole('button', { name: 'Sign in' }).click();
+        await popup
+          .waitForEvent('close', { timeout: 30_000 })
+          .catch(() => {});
+      } else {
+        // Redirect-based OIDC flow — Keycloak loaded in the same tab.
+        const usernameField = page.getByLabel('Username or email');
+        const hasUsernameField = await usernameField
+          .isVisible({ timeout: 10_000 })
+          .catch(() => false);
+        if (hasUsernameField) {
+          await usernameField.fill(user);
+          await page.getByLabel('Password').fill(pass);
+          await page.getByRole('button', { name: 'Sign in' }).click();
+        }
+        // If neither popup nor redirect produced a login form, the
+        // version probe will fail on the nav check below and fall
+        // through to the catch block harmlessly.
+      }
     }
 
     // Wait for the nav sidebar to appear after login.
